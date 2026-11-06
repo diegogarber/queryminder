@@ -35,3 +35,7 @@ Autostart on macOS: save this as `~/Library/LaunchAgents/com.queryminder.plist` 
 ```
 
 Docs: [scope](docs/SCOPE.md) · [architecture](docs/ARCHITECTURE.md). Tests: `python -m unittest -v`.
+
+## License
+
+Licensed under the GPL-3.0. See [LICENSE](LICENSE).
