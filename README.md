@@ -4,6 +4,13 @@ Always-on-top desktop card for the `## Today` (and, collapsed, `## Rest`) sectio
 The first run asks which `.md` file to use (pick one, or type a new name to create it
 with the three sections); right-click → *Change backing file…* switches later.
 
+<p align="center">
+  <img src="docs/screenshots/paper.png" alt="Retro paper skin" width="300">
+  <img src="docs/screenshots/dalek.png" alt="Dalek skin" width="300">
+  <img src="docs/screenshots/terminal.png" alt="Terminal skin" width="300">
+  <img src="docs/screenshots/lcars.png" alt="LCARS skin" width="300">
+</p>
+
 - **Start**: double-click `start-queryminder.cmd` on Windows or `start-queryminder.command` on macOS (needs Python 3 on PATH; on macOS with Homebrew also `brew install python-tk@3.15`, matching your Python version).
 - **Right-click** on macOS: right button or control-click.
 - **Click an item** → done (moved to `## Done`, stays visible struck-through today). Click it again to undo.
