@@ -14,19 +14,19 @@ from __future__ import annotations
 
 import datetime as dt
 import math
-import os
 import random
+import subprocess
 import tkinter as tk
 import tkinter.font as tkfont
 from dataclasses import dataclass
 from typing import Callable
 
-from . import model, monitors, picker, settings as settings_mod
+from . import compat, macos, model, monitors, picker, settings as settings_mod
 from .model import REST, TODAY, Completion, TodoError, TodoItem
 from .skins import ANIMATIONS, MASCOTS, SKINS, Frame, Skin, get_skin
 from .store import Snapshot, TodoFile
 
-TRANSPARENT = "#ff00fe"  # window colour key: pixels in this colour are see-through
+TRANSPARENT = compat.TRANSPARENT  # root background: see-through
 POLL_MS = 1000
 TOPMOST_EVERY = 5  # polls
 COMPLETE_DELAY_MS = 450  # strike-through animation before the item moves
@@ -75,6 +75,8 @@ class App:
         self.file = todo_file
         self.settings = settings
         self.skin: Skin = get_skin(settings.get("skin"))
+        if compat.IS_MAC:  # Aqua's default scale depends on the Tk version: pin it so fonts match px()
+            root.tk.call("tk", "scaling", 96 / 72)
         self.s = max(1.0, root.winfo_fpixels("1i") / 96.0)  # DPI scale for pixel sizes
         self.width = self.px(300)
 
@@ -114,30 +116,57 @@ class App:
         self._anim_last: str | None = None
         self._anim_playing = False
 
-        root.overrideredirect(True)
+        self.make_borderless()
         root.attributes("-topmost", True)
         try:
-            root.attributes("-transparentcolor", TRANSPARENT)
+            if compat.IS_MAC:
+                root.attributes("-transparent", True)
+            else:
+                root.attributes("-transparentcolor", TRANSPARENT)
         except tk.TclError:
             pass
         root.configure(bg=TRANSPARENT)
-        root.bind_all("<Button-3>", self.show_menu)
+        for seq in compat.MENU_EVENTS:
+            root.bind_all(seq, self.show_menu)
         root.protocol("WM_DELETE_WINDOW", self.exit)
+        if compat.IS_MAC:
+            root.createcommand("tk::mac::Quit", self.exit)  # Cmd-Q / Dock > Quit
 
         # Restore the saved position; ensure_on_screen() below validates it against the
         # monitors that exist *now* (e.g. a second monitor that has been unplugged).
         x, y = settings.get("x"), settings.get("y")
         saved = (x, y) if isinstance(x, int) and isinstance(y, int) else None
         start = saved or monitors.default_position(self.width, self.current_monitors())
+        if compat.IS_MAC:  # Aqua places a new window when idle, overwriting a position set before that
+            root.update_idletasks()
         root.geometry(f"+{start[0]}+{start[1]}")
 
         self.outer: tk.Frame | None = None
         self.build()
         self.load()
         self.ensure_on_screen(full=True)
+        if compat.IS_MAC:
+            root.update_idletasks()  # the window must exist
+            try:
+                macos.show_everywhere()
+            except (OSError, AttributeError, ValueError):
+                pass  # the card still works, just with a Dock icon and on one Space
         root.after(POLL_MS, self.poll)
 
     # ------------------------------------------------------------------ helpers
+
+    def make_borderless(self) -> None:
+        """No title bar. On Tk 9 Aqua, overrideredirect leaves the title bar or, if the window
+        is withdrawn first, a window that can't take keyboard focus; an empty style mask has
+        neither problem. Tk 8.6 has no -stylemask."""
+        if compat.IS_MAC:
+            try:
+                self.root.attributes("-stylemask", "")
+                self.root.geometry("")  # or the window stops following its content's height
+                return
+            except tk.TclError:
+                pass
+        self.root.overrideredirect(True)
 
     def px(self, n: float) -> int:
         return int(round(n * self.s))
@@ -181,6 +210,17 @@ class App:
             overstrike=overstrike,
         )
 
+    def bind_menu(self, widget: tk.Widget) -> None:
+        """Open the menu from this widget without also running its own click binding
+        (control-click is a <Button-1> to anything not bound to it specifically)."""
+
+        def context(e):
+            self.show_menu(e)
+            return "break"  # don't also run the global bind_all menu
+
+        for seq in compat.MENU_EVENTS:
+            widget.bind(seq, context)
+
     def fmt(self, template: str) -> str:
         return template.replace("{date}", _today_label()).replace("{stardate}", _stardate())
 
@@ -199,9 +239,10 @@ class App:
         self.f_small = self.font(8, bold=True)
         self.f_tiny = self.font(7)
         self.f_tiny_done = self.font(7, overstrike=True)
-        self.f_tag = tkfont.Font(root=self.root, family="Consolas", size=8, weight="bold")
+        mono = "Consolas" if "Consolas" in tkfont.families(self.root) else "Menlo"
+        self.f_tag = tkfont.Font(root=self.root, family=mono, size=8, weight="bold")
         # Stamp text is rotated, which bitmap fonts (e.g. Fixedsys) cannot do: use TrueType.
-        self.f_stamp = tkfont.Font(root=self.root, family="Consolas", size=14, weight="bold")
+        self.f_stamp = tkfont.Font(root=self.root, family=mono, size=14, weight="bold")
 
         self.outer = outer = tk.Frame(self.root, bg=TRANSPARENT)
         outer.pack()
@@ -273,6 +314,7 @@ class App:
         self.entry.bind("<Return>", lambda e: self.add_from_entry())
         self.entry.bind("<Escape>", self._entry_escape)
         plus.bind("<Button-1>", lambda e: self.focus_entry())
+        self.bind_menu(plus)
 
         self.status_lbl = tk.Label(card, text="", bg=sk.paper, fg=sk.muted, font=self.f_tiny, anchor="e")
         self.status_lbl.pack(fill="x", padx=self.px(10), pady=(0, self.px(4)))
@@ -314,6 +356,7 @@ class App:
             cursor="hand2",
         )
         self.min_btn.bind("<Button-1>", lambda e: self.toggle_minimized())
+        self.bind_menu(self.min_btn)
 
         self.rendered: tuple | None = None
         self.editing = False
@@ -522,9 +565,10 @@ class App:
                 self.root.geometry(f"+{self._drag['wx'] + dx}+{self._drag['wy'] + dy}")
 
         def release(e):
-            moved = bool(self._drag and self._drag["moved"])
-            self._drag = None
-            if moved:
+            drag, self._drag = self._drag, None
+            if drag is None:  # the press opened the menu instead (control-click)
+                return
+            if drag["moved"]:
                 self.save_settings()
             elif on_click:
                 on_click()
@@ -532,6 +576,7 @@ class App:
         widget.bind("<ButtonPress-1>", press)
         widget.bind("<B1-Motion>", motion)
         widget.bind("<ButtonRelease-1>", release)
+        self.bind_menu(widget)
         if on_double:
             widget.bind("<Double-Button-1>", lambda e: on_double())
 
@@ -599,6 +644,7 @@ class App:
         )
         toggle.pack(fill="x", pady=(self.px(2), self.px(2)))
         toggle.bind("<Button-1>", lambda e: self.toggle_rest())
+        self.bind_menu(toggle)
         toggle.bind("<Enter>", lambda e: toggle.configure(fg=sk.accent))
         toggle.bind("<Leave>", lambda e: toggle.configure(fg=sk.muted))
         if not self.rest_open or not (self.rest or rest_done):
@@ -621,11 +667,27 @@ class App:
         canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
         if h > self.px(REST_MAX_H):
             def wheel(e):
-                canvas.yview_scroll(int(-e.delta / 120) * 3, "units")
+                canvas.yview_scroll(compat.wheel_units(e.delta), "units")
+                return "break"
+
+            leftover = [0.0]  # trackpad pixels not yet worth a whole scroll unit
+
+            def touchpad(e):  # Tk 9 reports trackpads separately, in pixels
+                dy = float(self.root.tk.splitlist(self.root.tk.call("tk::PreciseScrollDeltas", e.delta))[1])
+                step = self.px(10)
+                units = int((leftover[0] + dy) / step)
+                leftover[0] += dy - units * step
+                if units:
+                    canvas.yview_scroll(-units, "units")
                 return "break"
 
             for w in widgets:
                 w.bind("<MouseWheel>", wheel)
+                if compat.IS_MAC:
+                    try:
+                        w.bind("<TouchpadScroll>", touchpad)
+                    except tk.TclError:  # Tk 8.6 has no such event; flicks arrive as <MouseWheel>
+                        break
 
     def item_row(self, parent: tk.Widget, item: TodoItem, done_row: DoneRow | None = None) -> list[tk.Widget]:
         """A pending item (click = complete) or, with ``done_row``, a done one (click = undo).
@@ -693,7 +755,8 @@ class App:
                 w.bind("<ButtonRelease-1>", lambda e, it=item, b=box, l=lbl: self.reorder_release(e, it, b, l))
             w.bind("<Enter>", enter)
             w.bind("<Leave>", leave)
-            w.bind("<Button-3>", context)
+            for seq in compat.MENU_EVENTS:
+                w.bind(seq, context)
         return widgets
 
     def draw_box(self, c: tk.Canvas, size: int, checked: bool) -> None:
@@ -1112,6 +1175,11 @@ class App:
         """Pick another (or a new) Markdown file to back the card."""
         self._menu_open = True  # pause topmost/placement refresh so the card doesn't cover the dialog
         try:
+            if compat.IS_MAC:
+                try:
+                    macos.activate()
+                except (OSError, AttributeError, ValueError):
+                    pass
             chosen = picker.choose_file(self.root, self.file.path, title="Change backing file")
         finally:
             self._menu_open = False
@@ -1128,8 +1196,8 @@ class App:
 
     def open_file(self) -> None:
         try:
-            os.startfile(self.file.path)  # type: ignore[attr-defined]
-        except OSError as e:
+            compat.open_path(self.file.path)
+        except (OSError, subprocess.SubprocessError) as e:
             self.set_status(f"open failed: {e}", error=True)
 
     def show_menu(self, event, item: TodoItem | None = None, done_row: DoneRow | None = None) -> None:

@@ -3,32 +3,40 @@
 ## Technology choice
 
 **Python 3 + Tkinter, standard library only.** Tk ships with the Windows
-Python installer, so there is nothing to install, startup is instant and the
-footprint is tiny. Windows-specific bits (`ctypes`) are used only for DPI
-awareness and the single-instance mutex. No third-party dependencies at
-runtime (Pillow is used only by the optional screenshot smoke test).
+Python installer and the python.org macOS one (Homebrew: `brew install python-tk@3.x`),
+startup is instant and the footprint is tiny. OS-specific bits (`ctypes`) are used
+only for DPI awareness, the single-instance mutex and monitor work areas. No
+third-party dependencies at runtime (Pillow is used only by the optional screenshot
+smoke test).
 
-Run: `start-queryminder.cmd` (uses `pythonw`, no console) or
+Run: `start-queryminder.cmd` (Windows, uses `pythonw`, no console),
+`start-queryminder.command` (macOS) or
 `python -m queryminder [--file PATH] [--allow-multiple]`.
+
+**Platforms**: Windows and macOS. Differences live in `compat.py`, `monitors.work_areas()`,
+`settings.settings_path()` and `App.make_borderless()`; see *macOS* below.
 
 ## Layout
 
 ```
 queryminder/
-  __main__.py   entry point: args, single-instance mutex, DPI awareness, Tk root
+  __main__.py   entry point: args, single-instance check, DPI awareness, Tk root
+  compat.py     OS differences: single instance, open file, transparent colour, menu events, wheel
+  macos.py      Objective-C runtime calls (screens, Spaces, Dock icon) through ctypes
   model.py      PURE Markdown parsing/editing (no I/O, no Tk) — fully unit tested
   store.py      file I/O: encoding/BOM/CRLF preservation, atomic write, retry, signature
-  settings.py   %APPDATA%\queryminder\settings.json + todo-file path resolution
+  settings.py   settings.json (%APPDATA% / ~/Library/Application Support) + todo-file path resolution
   picker.py     file dialog to choose / create the backing file (first run, Change backing file…)
-  monitors.py   monitor work areas (Win32 EnumDisplayMonitors) + PURE placement logic
+  monitors.py   monitor work areas (Win32 EnumDisplayMonitors / NSScreen) + PURE placement logic
   skins.py      skin definitions (pure data) + pixel-art mascots
   ui.py         Tkinter App: window, rendering, polling, actions, context menu
 tests/
   test_model.py unittest suite for model
   test_store.py new/incomplete file handling + path resolution
-  test_monitors.py placement logic (fit / is_reachable)
+  test_monitors.py placement logic (fit / is_reachable / cocoa_rect)
+  test_compat.py OS helpers: wheel units, single instance, settings path, open file
   test_skins.py skin / animation data integrity
-start-queryminder.cmd
+start-queryminder.cmd, start-queryminder.command
 docs/SCOPE.md, docs/ARCHITECTURE.md
 ```
 
@@ -174,6 +182,37 @@ nothing; keep it that way.
   window the user deliberately parks half off-screen is left alone. Skipped
   while dragging. Any correction is saved immediately.
 
+## macOS
+
+- **Borderless**: `wm attributes -stylemask ""` followed by `geometry("")`, not
+  `overrideredirect`. On Tk 9 Aqua, `overrideredirect` keeps the title bar (32 px, which
+  also made the card creep down on each minimize toggle) or, if withdrawn first, loses
+  `-topmost` and can't take keyboard focus. Without the `geometry("")` the window height
+  stops following its content. Tk 8.6 has no `-stylemask` and falls back to
+  `overrideredirect`.
+- **Start position**: Aqua places a new window when idle and overwrites a position set
+  before that, so `App` flushes idle tasks before its first `geometry()`.
+- **Transparency**: `-transparent` plus the `systemTransparent` colour instead of a
+  colour key.
+- **Menu**: right button is `<Button-2>` or `<Button-3>` by Tk version, control-click also
+  works (`compat.MENU_EVENTS`). The menu is native and modal; a script can't dismiss it.
+- **Scrolling**: `<MouseWheel>` deltas vary by Tk version (`compat.wheel_units`); Tk 9
+  reports trackpads as `<TouchpadScroll>` in pixels.
+- **Scale**: `tk scaling` is pinned to 96/72 so fonts and `px()` agree across Tk versions.
+  Coordinates are points, not physical pixels; `monitors.cocoa_rect` converts from
+  Cocoa's bottom-left origin. Intel's `objc_msgSend_stret` path is untested.
+- **Dialogs**: `picker` passes no `parent` on macOS. With one, a dialog becomes a sheet that
+  can't be moved, attached to a hidden window on first run (and partly off-screen).
+- **Choosing a file**: an open panel, then a save panel if the user cancels and asks for a
+  new file. The save panel prompts to replace existing files even with `confirmoverwrite=0`.
+- **Single instance**: `flock` on `instance.lock` next to `settings.json`.
+- **Every Space, no Dock icon** (`macos.show_everywhere`): the process becomes an accessory
+  app (macOS only lets those appear over other apps' full-screen windows) and the window
+  gets `CanJoinAllSpaces | IgnoresCycle | FullScreenAuxiliary`. So there is no Dock icon and
+  no app menu bar: quit with right-click > Exit. *Change backing file…* calls
+  `macos.activate()` first so its dialog isn't left behind other apps.
+- Cmd-Q runs `App.exit` (settings are saved) when the card has keyboard focus.
+
 ## Skins (`skins.py`)
 
 `Skin` fields: colours (`paper`, `ink`, `muted`, `accent`, `border`, `check`,
@@ -250,11 +289,13 @@ and stores the answer in settings (`--file` overrides are never persisted).
 - Items whose text is edited in Obsidian between render and click are reported
   as "no longer pending" and the list reloads.
 - "Done today" only knows about items completed through the app (or ticked
-  in place in Today); it is per machine (stored in %APPDATA%).
+  in place in Today); it is per machine (stored with the settings).
 - Borderless windows don't appear in the taskbar / Alt-Tab.
 
 ## Autostart
 
-Autostart is a `Queryminder.lnk` shortcut in the user's Startup folder running
+Windows: autostart is a `Queryminder.lnk` shortcut in the user's Startup folder running
 `pythonw.exe -m queryminder` from the project dir. If the project folder or Python
 install moves, update the shortcut. Remove the shortcut to disable autostart.
+
+macOS: a LaunchAgent in `~/Library/LaunchAgents` (template in the README).

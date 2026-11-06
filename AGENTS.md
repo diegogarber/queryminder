@@ -1,6 +1,6 @@
 # AGENTS.md — Queryminder
 
-Always-on-top Windows desktop card that shows/edits the `## Today` and
+Always-on-top desktop card (Windows and macOS) that shows/edits the `## Today` and
 `## Rest` sections of the user's Obsidian to-do list. Read `docs/SCOPE.md` (what) and
 `docs/ARCHITECTURE.md` (how) before changing behaviour; keep both up to date
 with any behaviour change.
@@ -40,10 +40,13 @@ with any behaviour change.
   file-format logic belongs here, with unit tests.
 - `queryminder/store.py` — encoding/newline-preserving I/O, atomic write,
   `PermissionError` retry, `(mtime_ns, size)` signature for polling.
+- `queryminder/compat.py` — OS differences (single instance, open file, transparent
+  colour, menu events, wheel). No Tk import.
+- `queryminder/macos.py` — Objective-C runtime calls via ctypes (screens, Spaces, Dock icon).
 - `queryminder/picker.py` — file dialog (choose/create backing file);
   `queryminder/ui.py` — Tkinter `App`; `queryminder/skins.py` — skins as data
   (add a skin = append to `SKINS`; optional header animations = `ANIMATIONS[mascot]`); `queryminder/settings.py` —
-  `%APPDATA%\queryminder\settings.json`; `queryminder/monitors.py` — monitor
+  `settings.json` (`%APPDATA%\queryminder\`, or `~/Library/Application Support/queryminder/` on macOS; `APPDATA` overrides it everywhere); `queryminder/monitors.py` — monitor
   enumeration + pure placement (`fit`, `is_reachable`); keep placement logic
   pure and unit tested.
 
@@ -51,8 +54,9 @@ with any behaviour change.
 
 - Python 3.10+ (developed on 3.14) + Tkinter, **standard library only**. Don't
   add runtime dependencies without a strong reason.
-- Run: `start-queryminder.cmd` or `python -m queryminder --file <path>`
-  (`--allow-multiple` bypasses the single-instance mutex — needed if the user's
+- Run: `start-queryminder.cmd` (Windows), `start-queryminder.command` (macOS) or
+  `python -m queryminder --file <path>`
+  (`--allow-multiple` bypasses the single-instance check — needed if the user's
   instance is already running).
 - Test: `python -m unittest -v` (must pass before finishing any change).
 - UI changes: verify visually with a throwaway script that runs `App` on a temp
@@ -62,13 +66,14 @@ with any behaviour change.
 
 ## Autostart
 
-Autostart is a `Queryminder.lnk` shortcut in the user's Startup folder running
+Windows: autostart is a `Queryminder.lnk` shortcut in the user's Startup folder running
 `pythonw.exe -m queryminder` from the project dir. If the project folder or Python
 install moves, update the shortcut. Remove the shortcut to disable autostart.
+macOS: a LaunchAgent (template in the README).
 
 ## Windows/Tk gotchas
 
-- Window is `overrideredirect` + `-topmost`; the root bg `#ff00fe` is a
+- Window is `overrideredirect` + `-topmost`; on Windows the root bg `#ff00fe` is a
   transparent colour key — don't use that colour in skins.
 - Entry focus in a borderless window needs `focus_force()`.
 - `tk_popup()` (right-click menu) blocks in a modal loop but `after()` timers keep
@@ -83,5 +88,9 @@ install moves, update the shortcut. Remove the shortcut to disable autostart.
 - `winfo_x/y` are stale right after `geometry()` until `update_idletasks()`.
 - Bash heredocs in this harness can eat backslashes; write scripts with
   backslashes to a file instead.
+- macOS (`docs/ARCHITECTURE.md` § macOS): the window uses `-stylemask ""`, not
+  `overrideredirect`. `screencapture`/`ImageGrab` need Screen Recording permission, and a
+  scripted `tk_popup` blocks until someone dismisses the native menu, so don't call it
+  in smoke scripts. Windows gotchas above about `-topmost` still apply.
 - In bash heredocs, watch backslashes in Windows strings (e.g. the mutex name
   `Local\\QueryminderSingleInstance`).

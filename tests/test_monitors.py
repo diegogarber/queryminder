@@ -1,6 +1,6 @@
 import unittest
 
-from queryminder.monitors import MARGIN, Monitor, Rect, default_position, fit, is_reachable
+from queryminder.monitors import MARGIN, Monitor, Rect, cocoa_rect, default_position, fit, is_reachable
 
 PRIMARY = Monitor(Rect(0, 0, 1920, 1040), primary=True)  # 1080p minus taskbar
 RIGHT = Monitor(Rect(1920, 0, 4480, 1400))  # second monitor to the right
@@ -44,6 +44,18 @@ class ReachableTests(unittest.TestCase):
         self.assertFalse(is_reachable(1920 - 20, 100, W, [PRIMARY]))
         self.assertFalse(is_reachable(100, -30, W, [PRIMARY]))  # header above the screen
         self.assertFalse(is_reachable(3000, 100, W, [PRIMARY]))
+
+
+class CocoaRectTests(unittest.TestCase):
+    def test_primary_screen_flips_y(self):
+        # 1117 pt tall screen: 33 pt menu bar on top, 90 pt Dock below.
+        self.assertEqual(cocoa_rect(0, 90, 1728, 994, 1117), Rect(0, 33, 1728, 1027))
+
+    def test_screen_above_primary_has_negative_top(self):
+        self.assertEqual(cocoa_rect(0, 1117, 1920, 1080, 1117), Rect(0, -1080, 1920, 0))
+
+    def test_screen_left_of_primary(self):
+        self.assertEqual(cocoa_rect(-1920, 0, 1920, 1080, 1117), Rect(-1920, 37, 0, 1117))
 
 
 if __name__ == "__main__":

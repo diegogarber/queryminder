@@ -1,9 +1,9 @@
 """Monitor detection and window placement.
 
 ``fit()`` / ``is_reachable()`` are pure (unit tested). ``work_areas()`` asks
-Windows for the current monitors via ctypes. All coordinates are physical
-pixels in the virtual-screen space (the process is DPI aware, as is Tk), so
-monitors left of / above the primary have negative coordinates.
+the OS for the current monitors via ctypes. All coordinates are in Tk's screen
+space: physical pixels on Windows (the process is DPI aware, as is Tk), points
+on macOS. Monitors left of / above the primary have negative coordinates.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class Rect:
 
 @dataclass(frozen=True)
 class Monitor:
-    work: Rect  # work area (excludes the taskbar)
+    work: Rect  # work area (excludes the taskbar; on macOS the menu bar and Dock)
     primary: bool = False
 
 
@@ -87,13 +87,42 @@ def fit(x: int | None, y: int | None, width: int, height: int, monitors: list[Mo
     return nx, ny
 
 
-# --------------------------------------------------------------------------- Windows
+def cocoa_rect(x: float, y: float, width: float, height: float, primary_height: float) -> Rect:
+    """Cocoa frame (origin bottom-left of the primary screen, y up) -> Tk screen rect
+    (origin top-left of the primary screen, y down)."""
+    top = primary_height - (y + height)
+    return Rect(round(x), round(top), round(x + width), round(top + height))
+
+
+# --------------------------------------------------------------------------- OS queries
 
 
 def work_areas() -> list[Monitor]:
     """Current monitors' work areas (empty list if unavailable)."""
-    if sys.platform != "win32":
+    if sys.platform == "win32":
+        return _windows_work_areas()
+    if sys.platform == "darwin":
+        return _mac_work_areas()
+    return []
+
+
+def _mac_work_areas() -> list[Monitor]:
+    from . import macos
+
+    try:
+        frames = macos.screen_frames()
+    except (OSError, AttributeError, ValueError):
         return []
+    if not frames:
+        return []
+    primary_height = frames[0][0].height  # the first screen holds the coordinate origin
+    return [
+        Monitor(cocoa_rect(v.x, v.y, v.width, v.height, primary_height), primary=i == 0)
+        for i, (_frame, v) in enumerate(frames)
+    ]
+
+
+def _windows_work_areas() -> list[Monitor]:
     from ctypes import wintypes
 
     class MONITORINFO(ctypes.Structure):

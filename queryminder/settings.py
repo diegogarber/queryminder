@@ -1,14 +1,20 @@
-"""Small JSON settings file in %APPDATA%\\queryminder\\settings.json."""
+"""Small JSON settings file: %APPDATA%\\queryminder\\settings.json on Windows,
+~/Library/Application Support/queryminder/settings.json on macOS."""
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 
 def settings_path() -> Path:
-    base = os.environ.get("APPDATA") or str(Path.home())
+    # APPDATA also wins on macOS, so tests can isolate settings the same way everywhere.
+    base = os.environ.get("APPDATA")
+    if not base:
+        home = Path.home()
+        base = str(home / "Library" / "Application Support") if sys.platform == "darwin" else str(home)
     return Path(base) / "queryminder" / "settings.json"
 
 

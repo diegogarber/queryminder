@@ -26,7 +26,7 @@ class Skin:
     stamp: str = "DONE!"
     flash: str = "done!"  # footer message after completing an item
     check_shape: str = "square"  # "square" | "circle" | "paw" (square, paw print when ticked)
-    fonts: tuple[str, ...] = ("Cascadia Mono", "Consolas", "Courier New")
+    fonts: tuple[str, ...] = ("Cascadia Mono", "Consolas", "Menlo", "Courier New")
     mascot: str | None = None  # key into MASCOTS
     rule: str = "dots"  # separator: "dots" | "lcars" (colour bars) | "teeth" (Domo mouth) | "paws"
     rule_colors: tuple[str, ...] = ()  # palette for "lcars" rules
@@ -68,7 +68,7 @@ SKINS: list[Skin] = [
         stamp="EXTERMINATED",
         flash="EXTERMINATED!",
         check_shape="circle",
-        fonts=("Fixedsys", "Consolas", "Courier New"),
+        fonts=("Fixedsys", "Consolas", "Menlo", "Courier New"),
         mascot="dalek",
     ),
     Skin(
@@ -105,7 +105,7 @@ SKINS: list[Skin] = [
         empty="0 results. exit 0",
         stamp="OK",
         flash="[ OK ]",
-        fonts=("Lucida Console", "Consolas", "Courier New"),
+        fonts=("Lucida Console", "Consolas", "Monaco", "Courier New"),
     ),
     Skin(
         key="sticky",
@@ -121,7 +121,7 @@ SKINS: list[Skin] = [
         title="today · {date}",
         section="don't forget",
         stamp="YAY",
-        fonts=("Segoe Print", "Comic Sans MS", "Segoe UI"),
+        fonts=("Segoe Print", "Comic Sans MS", "Segoe UI", "Helvetica Neue"),
     ),
     Skin(
         key="lcars",
@@ -139,7 +139,7 @@ SKINS: list[Skin] = [
         empty="All systems nominal.",
         stamp="MAKE IT SO",
         flash="Engage!",
-        fonts=("Bahnschrift SemiCondensed", "Arial Narrow", "Segoe UI"),
+        fonts=("Bahnschrift SemiCondensed", "Arial Narrow", "Segoe UI", "Helvetica Neue"),
         mascot="delta",
         rule="lcars",
         rule_colors=("#ff9900", "#cc99cc", "#ffcc99", "#9999cc", "#cc6666", "#ff9966"),
@@ -160,7 +160,7 @@ SKINS: list[Skin] = [
         empty="Domo is full.",
         stamp="NOM!",
         flash="*chomp*",
-        fonts=("Cascadia Mono SemiBold", "Consolas", "Courier New"),
+        fonts=("Cascadia Mono SemiBold", "Consolas", "Menlo", "Courier New"),
         mascot="domo",
         rule="teeth",
     ),
@@ -181,7 +181,7 @@ SKINS: list[Skin] = [
         stamp="GOOD BOY!",
         flash="*snort snort*",
         check_shape="paw",
-        fonts=("Segoe UI Semibold", "Segoe UI", "Consolas"),
+        fonts=("Segoe UI Semibold", "Segoe UI", "Helvetica Neue", "Consolas"),
         mascot="frenchie",
         rule="paws",
     ),

@@ -7,23 +7,9 @@ import ctypes
 import sys
 import tkinter as tk
 
-from . import picker, settings as settings_mod
+from . import compat, picker, settings as settings_mod
 from .store import TodoFile
 from .ui import App
-
-MUTEX_NAME = "Local\\QueryminderSingleInstance"
-ERROR_ALREADY_EXISTS = 183
-
-
-def _single_instance() -> bool:
-    """True if this is the only running instance (Windows named mutex)."""
-    try:
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-    except AttributeError:
-        return True
-    handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
-    globals()["_mutex_handle"] = handle  # keep it alive for the process lifetime
-    return kernel32.GetLastError() != ERROR_ALREADY_EXISTS
 
 
 def _dpi_aware() -> None:
@@ -39,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-multiple", action="store_true", help="skip the single-instance check")
     args = parser.parse_args(argv)
 
-    if not args.allow_multiple and not _single_instance():
+    if not args.allow_multiple and not compat.single_instance():
         return 0
     _dpi_aware()
     settings = settings_mod.load()

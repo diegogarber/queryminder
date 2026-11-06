@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A small, always-visible desktop card for Windows that shows the items pending
+A small, always-visible desktop card for Windows and macOS that shows the items pending
 **today** from the Obsidian to-do list (plus, collapsed, the rest of the open
 items), and lets the user tick them off, add, edit, move and schedule them
 without opening Obsidian. The visual style loosely follows a retro
@@ -169,7 +169,7 @@ Reopening an item from Done strips the date.
   are supported.
 - Frontmatter `updated:` is set to today's date whenever the app writes.
 - Single instance: launching it twice does nothing.
-- Starts automatically at Windows login (Startup-folder shortcut).
+- Starts automatically at login (Windows: Startup-folder shortcut; macOS: LaunchAgent, see README).
 - Friendly in-card error if the file or the `## Today` / `## Done` headings are
   missing; it recovers automatically once fixed.
 
